@@ -3,6 +3,14 @@ class User < ActiveRecord::Base
                   :remember_token
   has_secure_password
   has_many :microposts, dependent: :destroy
+  has_many :relationships, :dependent => :destroy,
+                           :foreign_key => "follower_id"
+  has_many :reverse_relationships, :dependent => :destroy,
+                                   :foreign_key => "followed_id",
+                                   :class_name => "Relationship"
+  has_many :followed_users, :through => :relationships, :source => :followed
+  has_many :followers, :through => :reverse_relationships,
+                       :source  => :follower
 
   before_save { |user| user.email = user.email.downcase }
   before_save :create_remember_token
@@ -14,9 +22,21 @@ class User < ActiveRecord::Base
   validates :password, length: { minimum: 6 }
   validates :password_confirmation, presence: true
 
-  def feed
-    # This is only a proto-feed.
-    Micropost.where("user_id = ?", id)
+
+  def following?(other_user)
+    relationships.find_by_followed_id(other_user.id)
+  end
+
+  def follow!(other_user)
+    relationships.create!(followed_id: other_user.id)
+  end
+
+  def unfollow!(other_user)
+    relationships.find_by_followed_id(other_user.id).destroy
+  end
+
+  def feed  
+    Micropost.from_users_followed_by(self)
   end
 
   private
